@@ -2,74 +2,196 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Login</title>
+<title>Login & Signup</title>
 <style>
-body{font-family:Arial;background:linear-gradient(120deg,#0c3b3b,#065f5f);display:flex;justify-content:center;align-items:center;height:100vh}
-.box{background:#fff;padding:30px;width:420px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+body{
+    font-family:Arial;
+    background:linear-gradient(120deg,#0c3b3b,#065f5f);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh
+}
+.box{
+    background:#fff;
+    padding:30px;
+    width:420px;
+    border-radius:12px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25)
+}
 h2{text-align:center;color:#009879}
-input,select{width:100%;padding:10px;margin:10px 0;border-radius:8px;border:1px solid #ccc}
-button{width:100%;background:#009879;color:#fff;padding:12px;border:none;border-radius:8px;font-weight:700}
+input,select{
+    width:100%;
+    padding:10px;
+    margin:10px 0;
+    border-radius:8px;
+    border:1px solid #ccc
+}
+button{
+    width:100%;
+    background:#009879;
+    color:#fff;
+    padding:12px;
+    border:none;
+    border-radius:8px;
+    font-weight:700;
+    cursor:pointer;
+}
+.toggle{
+    text-align:center;
+    margin-top:15px;
+    color:#009879;
+    cursor:pointer;
+    font-weight:bold;
+}
+.hidden{display:none}
 </style>
 </head>
 <body>
 
 <div class="box">
-<h2>Login</h2>
 
+<h2 id="formTitle">Login</h2>
+
+<!-- LOGIN FORM -->
 <form id="loginForm">
-<select id="role" required>
+
+<select id="loginRole" required>
 <option value="student">Student</option>
 <option value="teacher">Teacher</option>
 <option value="admin">Administrator</option>
 </select>
 
-<input type="text" id="username" placeholder="Email (Student/Admin) or Faculty Name (Teacher)" required>
-<input type="password" id="password" placeholder="Password" required>
+<input type="text" id="loginUsername" placeholder="Email (Student/Admin) or Faculty Name (Teacher)" required>
+<input type="password" id="loginPassword" placeholder="Password" required>
 
 <button type="submit">Login</button>
 </form>
+
+
+<!-- SIGNUP FORM -->
+<form id="signupForm" class="hidden">
+
+<input type="text" id="signupName" placeholder="Full Name" required>
+
+<select id="signupRole" required>
+<option value="student">Student</option>
+<option value="teacher">Teacher</option>
+<option value="admin">Administrator</option>
+</select>
+
+<input type="email" id="signupEmail" placeholder="Email" required>
+<input type="password" id="signupPassword" placeholder="Password" required>
+
+<button type="submit">Sign Up</button>
+</form>
+
+<div class="toggle" id="toggleForm">Don't have an account? Sign Up</div>
+
 </div>
 
 <script>
-const API_BASE="http://localhost:5000";
 
-document.getElementById("loginForm").onsubmit=async function(e){
-e.preventDefault();
+const API_BASE="https://smartclass-o48g.onrender.com";
 
-const role=document.getElementById("role").value;
-const username=document.getElementById("username").value.trim();
-const password=document.getElementById("password").value;
+const loginForm=document.getElementById("loginForm");
+const signupForm=document.getElementById("signupForm");
+const toggleForm=document.getElementById("toggleForm");
+const formTitle=document.getElementById("formTitle");
 
-try{
-const res=await fetch(`${API_BASE}/login`,{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-role,
-email:username,
-password
-})
-});
 
-const data=await res.json();
-
-if(!res.ok){
-alert(data.message);
-return;
-}
-
-localStorage.setItem("sc_token",data.token);
-localStorage.setItem("sc_role",data.role);
-localStorage.setItem("sc_name",data.name);
-
-if(data.role==="student") window.location.href="student.html";
-else if(data.role==="admin") window.location.href="admin.html";
-else if(data.role==="teacher") window.location.href="teacher.html";
-
-}catch(err){
-alert("Server error");
-}
+// TOGGLE LOGIN / SIGNUP
+toggleForm.onclick=function(){
+    if(loginForm.classList.contains("hidden")){
+        loginForm.classList.remove("hidden");
+        signupForm.classList.add("hidden");
+        formTitle.innerText="Login";
+        toggleForm.innerText="Don't have an account? Sign Up";
+    }else{
+        loginForm.classList.add("hidden");
+        signupForm.classList.remove("hidden");
+        formTitle.innerText="Sign Up";
+        toggleForm.innerText="Already have an account? Login";
+    }
 };
+
+
+// LOGIN FUNCTION
+loginForm.onsubmit=async function(e){
+    e.preventDefault();
+
+    const role=document.getElementById("loginRole").value;
+    const username=document.getElementById("loginUsername").value.trim();
+    const password=document.getElementById("loginPassword").value;
+
+    try{
+        const res=await fetch(`${API_BASE}/login`,{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+                role,
+                email:username,
+                password
+            })
+        });
+
+        const data=await res.json();
+
+        if(!res.ok){
+            alert(data.message);
+            return;
+        }
+
+        localStorage.setItem("sc_token",data.token);
+        localStorage.setItem("sc_role",data.role);
+        localStorage.setItem("sc_name",data.name);
+
+        if(data.role==="student") window.location.href="student.html";
+        else if(data.role==="admin") window.location.href="admin.html";
+        else if(data.role==="teacher") window.location.href="teacher.html";
+
+    }catch(err){
+        alert("Server error");
+    }
+};
+
+
+// SIGNUP FUNCTION
+signupForm.onsubmit=async function(e){
+    e.preventDefault();
+
+    const name=document.getElementById("signupName").value.trim();
+    const role=document.getElementById("signupRole").value;
+    const email=document.getElementById("signupEmail").value.trim();
+    const password=document.getElementById("signupPassword").value;
+
+    try{
+        const res=await fetch(`${API_BASE}/signup`,{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+                name,
+                role,
+                email,
+                password
+            })
+        });
+
+        const data=await res.json();
+
+        if(!res.ok){
+            alert(data.message);
+            return;
+        }
+
+        alert("Signup successful! Please login.");
+        toggleForm.click();
+
+    }catch(err){
+        alert("Server error");
+    }
+};
+
 </script>
 
 </body>
