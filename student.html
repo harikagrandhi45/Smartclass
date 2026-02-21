@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SmartClass - Student Dashboard</title>
+
+<style>
+:root{--accent:#009879;--panel:#ffffff;--muted:#666;--card-shadow:0 6px 18px rgba(0,0,0,0.06);}
+body{ font-family: Arial, sans-serif; background:#e9f5f2; margin:0; padding:28px; }
+header{ display:flex; justify-content:space-between; margin-bottom:18px; }
+h1{ margin:0; color:var(--accent); font-size:32px; }
+.layout{ display:grid; grid-template-columns: 1fr 380px; gap:18px; }
+.card{ background:var(--panel); border-radius:10px; padding:16px; box-shadow:var(--card-shadow); }
+.controls{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+select,input,textarea{ padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
+button{ background:var(--accent); color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
+table{ width:100%; border-collapse:collapse; font-size:13px; }
+th,td{ border:1px solid #ddd; padding:6px; text-align:center; }
+th{ background:var(--accent); color:#fff; }
+.chat-window{ height:300px; overflow-y:auto; border:1px solid #ddd; padding:10px; margin-bottom:8px; background:#f9f9f9; }
+.msg{ margin-bottom:8px; padding:6px 8px; border-radius:6px; font-size:13px; }
+.msg.user{ background:#d1f0ea; text-align:right; }
+.msg.bot{ background:#f0f0f0; }
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>Student Dashboard</h1>
+<a href="index.html">Logout</a>
+</header>
+
+<div class="layout">
+
+<div class="card">
+
+<div class="controls">
+<select id="gradeSelect"></select>
+<button id="loadBtn">Load</button>
+<button id="refreshBtn">Refresh</button>
+</div>
+
+<div id="timetableContainer"></div>
+<div id="noTimetableMsg">No timetable found. Ask faculty to generate.</div>
+
+<h3>Submit Feedback</h3>
+<textarea id="feedbackInput" placeholder="Write feedback..."></textarea><br>
+<button id="feedbackBtn">Submit</button>
+
+</div>
+
+<div class="card">
+<h3>Timetable Chatbot</h3>
+<div class="chat-window" id="chatWindow">
+<div class="msg bot">Hi! Select your grade and ask about your timetable.</div>
+</div>
+<input type="text" id="chatInput" placeholder="Ask about timetable..." style="width:75%">
+<button id="askBtn">Ask</button>
+</div>
+
+</div>
+
+<script>
+const API_BASE="http://localhost:5000";
+const token=localStorage.getItem("sc_token")||"";
+
+function authHeaders(){
+const h={"Content-Type":"application/json"};
+if(token) h["Authorization"]="Bearer "+token;
+return h;
+}
+
+async function apiFetch(path,opts={}){
+opts.headers={...(opts.headers||{}),...authHeaders()};
+const res=await fetch(API_BASE+path,opts);
+if(!res.ok) throw new Error((await res.json()).message||res.statusText);
+return res.json();
+}
+
+let gradesList=[];
+let currentSchedules=[];
+
+/* ================= INIT ================= */
+
+async function init(){
+try{ gradesList=await apiFetch("/grades"); }catch(e){ gradesList=[]; }
+try{ currentSchedules=await apiFetch("/schedules"); }catch(e){ currentSchedules=[]; }
+populateGrades();
+}
+
+function populateGrades(){
+const sel=document.getElementById("gradeSelect");
+sel.innerHTML='<option value="">Select Grade</option>';
+gradesList.forEach(g=>{
+const name=`${g.year}-${g.branch}-${g.section}`;
+sel.innerHTML+=`<option value="${name}">${name}</option>`;
+});
+}
+
+/* ================= RENDER ================= */
+
+function renderTimetable(grade){
+const cont=document.getElementById("timetableContainer");
+const msg=document.getElementById("noTimetableMsg");
+cont.innerHTML="";
+if(!grade){msg.style.display="block";return;}
+
+const entries=currentSchedules.filter(e=>e.grade===grade);
+if(entries.length===0){msg.style.display="block";return;}
+msg.style.display="none";
+
+const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const times=[...new Set(entries.map(e=>e.time))];
+
+let html='<table><tr><th>Day/Time</th>'+times.map(t=>`<th>${t}</th>`).join("")+'</tr>';
+days.forEach(day=>{
+html+=`<tr><td><b>${day}</b></td>`;
+times.forEach(time=>{
+const e=entries.find(x=>x.day===day&&x.time===time);
+html+=`<td>${e?`${e.subject}<br><small>${e.faculty}<br>${e.classroom}</small>`:'-'}</td>`;
+});
+html+='</tr>';
+});
+html+='</table>';
+cont.innerHTML=html;
+}
+
+/* ================= CHATBOT ================= */
+
+document.getElementById("askBtn").addEventListener("click",handleChat);
+
+function appendChat(role,text){
+const win=document.getElementById("chatWindow");
+const el=document.createElement("div");
+el.className="msg "+(role==="user"?"user":"bot");
+el.innerHTML=text;
+win.appendChild(el);
+win.scrollTop=win.scrollHeight;
+}
+
+function handleChat(){
+const q=document.getElementById("chatInput").value.trim();
+if(!q) return;
+appendChat("user",q);
+document.getElementById("chatInput").value="";
+
+const grade=document.getElementById("gradeSelect").value;
+if(!grade){appendChat("bot","Select grade first.");return;}
+
+const entries=currentSchedules.filter(e=>e.grade===grade);
+if(entries.length===0){appendChat("bot","No timetable found.");return;}
+
+const lower=q.toLowerCase();
+const days=["monday","tuesday","wednesday","thursday","friday","saturday"];
+
+/* Day + Time */
+for(const e of entries){
+if(lower.includes(e.day.toLowerCase()) &&
+lower.includes(e.time.toLowerCase())){
+appendChat("bot",`<b>${e.subject}</b><br>${e.day} ${e.time}<br>${e.faculty}<br>${e.classroom}`);
+return;
+}
+}
+
+/* Subject */
+for(const e of entries){
+if(lower.includes(e.subject.toLowerCase())){
+appendChat("bot",`<b>${e.subject}</b><br>${e.day} ${e.time}<br>${e.faculty}<br>${e.classroom}`);
+return;
+}
+}
+
+/* Today */
+if(lower.includes("today")){
+const today=new Date().toLocaleDateString('en-US',{weekday:'long'});
+const todayEntries=entries.filter(e=>e.day===today);
+if(todayEntries.length===0){appendChat("bot","No classes today.");return;}
+let msg="<b>Today's Classes</b><br>";
+todayEntries.forEach(e=>{
+msg+=`${e.time} - ${e.subject}<br>`;
+});
+appendChat("bot",msg);
+return;
+}
+
+/* Now */
+if(lower.includes("now")){
+const now=new Date();
+const today=now.toLocaleDateString('en-US',{weekday:'long'});
+const mins=now.getHours()*60+now.getMinutes();
+for(const e of entries.filter(x=>x.day===today)){
+const t=e.time.split("-");
+const start=convertToMin(t[0]);
+const end=convertToMin(t[1]);
+if(mins>=start && mins<=end){
+appendChat("bot",`You have ${e.subject} now in ${e.classroom}`);
+return;
+}
+}
+appendChat("bot","No class right now.");
+return;
+}
+
+appendChat("bot","Try: 'What do I have Monday 8:00-8:50?' or 'What do I have today?'");
+}
+
+function convertToMin(str){
+const [h,m]=str.split(":");
+return parseInt(h)*60+parseInt(m);
+}
+
+/* ================= EVENTS ================= */
+
+document.getElementById("loadBtn").addEventListener("click",()=>{
+const grade=document.getElementById("gradeSelect").value;
+renderTimetable(grade);
+});
+
+document.getElementById("refreshBtn").addEventListener("click",init);
+
+document.getElementById("feedbackBtn").addEventListener("click",async()=>{
+const txt=document.getElementById("feedbackInput").value.trim();
+if(!txt){alert("Enter feedback");return;}
+const grade=document.getElementById("gradeSelect").value||"Unknown";
+await apiFetch("/feedback",{method:"POST",
+body:JSON.stringify({
+student:localStorage.getItem("sc_name")||"Student",
+grade,
+message:txt,
+timestamp:new Date().toLocaleString()
+})});
+alert("Feedback submitted");
+document.getElementById("feedbackInput").value="";
+});
+
+/* START */
+init();
+</script>
+
+</body>
+</html>

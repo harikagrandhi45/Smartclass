@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Manage Classrooms & Labs</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#f9fafb; margin:0; padding:0; }
+  h1 { text-align:center; background:#004d40; color:white; padding:40px; margin:0; }
+  .container { width:90%; margin:30px auto; }
+  a { display:inline-block; margin-bottom:20px; text-decoration:none; color:#004d40; font-weight:bold; }
+  .form-section, .table-section { background:white; padding:20px; border-radius:12px; box-shadow:0 4px 8px rgba(0,0,0,0.05); margin-bottom:30px; }
+  input[type="text"] { padding:8px; margin-right:10px; border:1px solid #ccc; border-radius:6px; font-size:14px; }
+  button { background:#00796b; color:white; border:none; padding:8px 15px; border-radius:8px; cursor:pointer; font-size:14px; margin:2px; }
+  button:hover { background:#00695c; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  table th, table td { border:1px solid #e0e0e0; padding:10px; text-align:center; font-size:14px; }
+  table th { background:#004d40; color:white; }
+  .action-btn { background:#0288d1; }
+  .action-btn:hover { background:#0277bd; }
+  .delete-btn { background:#d32f2f; }
+  .delete-btn:hover { background:#b71c1c; }
+</style>
+</head>
+<body>
+<h1>Manage Classrooms & Labs</h1>
+<div class="container">
+  <a href="index.html">← Back to Dashboard</a>
+
+  <!-- Classrooms -->
+  <div class="form-section">
+    <h2>Add Classroom</h2>
+    <input type="text" id="classroomName" placeholder="Classroom Name">
+    <button id="addClassroomBtn">➕ Add Classroom</button>
+  </div>
+
+  <div class="table-section">
+    <h2>Classrooms List</h2>
+    <table id="classroomTable"><tr><th>Classroom</th><th>Action</th></tr></table>
+  </div>
+
+  <!-- Labs -->
+  <div class="form-section">
+    <h2>Add Lab</h2>
+    <input type="text" id="labName" placeholder="Lab Name">
+    <button id="addLabBtn">➕ Add Lab</button>
+  </div>
+
+  <div class="table-section">
+    <h2>Labs List</h2>
+    <table id="labTable"><tr><th>Lab</th><th>Action</th></tr></table>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:5000";
+const token = localStorage.getItem("sc_token") || "";
+function headers(){ const h = { "Content-Type":"application/json" }; if(token) h["Authorization"]="Bearer "+token; return h; }
+
+async function fetchClassrooms(){
+  try {
+    const res = await fetch(`${API_BASE}/classrooms`, { headers: headers() });
+    if(!res.ok) throw new Error((await res.json()).message || res.statusText);
+    const data = await res.json();
+    renderClassrooms(data);
+  } catch (err) { alert("Failed to load classrooms: " + err.message); }
+}
+
+function renderClassrooms(list){
+  const table = document.getElementById("classroomTable");
+  table.innerHTML = '<tr><th>Classroom</th><th>Action</th></tr>';
+  list.forEach(c => {
+    table.innerHTML += `<tr>
+      <td>${escapeHtml(c.name)}</td>
+      <td>
+        <button class="action-btn" onclick="editClassroom('${c._id}','${escapeAttr(c.name)}')">Edit</button>
+        <button class="delete-btn" onclick="deleteClassroom('${c._id}')">Delete</button>
+      </td>
+    </tr>`;
+  });
+}
+
+async function addClassroom(){
+  const name = document.getElementById("classroomName").value.trim();
+  if(!name){ alert("Enter classroom name"); return; }
+  try {
+    const res = await fetch(`${API_BASE}/classrooms`, { method:"POST", headers:headers(), body: JSON.stringify({ name }) });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.message || res.statusText);
+    document.getElementById("classroomName").value = "";
+    fetchClassrooms();
+  } catch (err) { alert("Add classroom failed: " + err.message); }
+}
+
+async function editClassroom(id, currentName){
+  const newName = prompt("Enter new classroom name:", currentName);
+  if(newName === null) return;
+  const trimmed = newName.trim();
+  if(!trimmed){ alert("Name cannot be empty"); return; }
+  try {
+    const res = await fetch(`${API_BASE}/classrooms/${id}`, { method:"PUT", headers:headers(), body: JSON.stringify({ name: trimmed }) });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.message || res.statusText);
+    fetchClassrooms();
+  } catch (err) { alert("Update failed: " + err.message); }
+}
+
+async function deleteClassroom(id){
+  if(!confirm("Delete this classroom?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/classrooms/${id}`, { method:"DELETE", headers:headers() });
+    if(!res.ok) throw new Error((await res.json()).message || res.statusText);
+    fetchClassrooms();
+  } catch (err) { alert("Delete failed: " + err.message); }
+}
+
+/* Labs */
+async function fetchLabs(){
+  try {
+    const res = await fetch(`${API_BASE}/labs`, { headers: headers() });
+    if(!res.ok) throw new Error((await res.json()).message || res.statusText);
+    renderLabs(await res.json());
+  } catch (err) { alert("Failed to load labs: " + err.message); }
+}
+
+function renderLabs(list){
+  const table = document.getElementById("labTable");
+  table.innerHTML = '<tr><th>Lab</th><th>Action</th></tr>';
+  list.forEach(l => {
+    table.innerHTML += `<tr>
+      <td>${escapeHtml(l.name)}</td>
+      <td>
+        <button class="action-btn" onclick="editLab('${l._id}','${escapeAttr(l.name)}')">Edit</button>
+        <button class="delete-btn" onclick="deleteLab('${l._id}')">Delete</button>
+      </td>
+    </tr>`;
+  });
+}
+
+async function addLab(){
+  const name = document.getElementById("labName").value.trim();
+  if(!name){ alert("Enter lab name"); return; }
+  try {
+    const res = await fetch(`${API_BASE}/labs`, { method:"POST", headers:headers(), body: JSON.stringify({ name }) });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.message || res.statusText);
+    document.getElementById("labName").value = "";
+    fetchLabs();
+  } catch (err) { alert("Add lab failed: " + err.message); }
+}
+
+async function editLab(id, currentName){
+  const newName = prompt("Enter new lab name:", currentName);
+  if(newName === null) return;
+  const trimmed = newName.trim();
+  if(!trimmed){ alert("Name cannot be empty"); return; }
+  try {
+    const res = await fetch(`${API_BASE}/labs/${id}`, { method:"PUT", headers:headers(), body: JSON.stringify({ name: trimmed }) });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.message || res.statusText);
+    fetchLabs();
+  } catch (err) { alert("Update failed: " + err.message); }
+}
+
+async function deleteLab(id){
+  if(!confirm("Delete this lab?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/labs/${id}`, { method:"DELETE", headers:headers() });
+    if(!res.ok) throw new Error((await res.json()).message || res.statusText);
+    fetchLabs();
+  } catch (err) { alert("Delete failed: " + err.message); }
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return String(s).replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+
+/* attach buttons */
+document.getElementById("addClassroomBtn").addEventListener("click", addClassroom);
+document.getElementById("addLabBtn").addEventListener("click", addLab);
+
+/* initial load */
+fetchClassrooms();
+fetchLabs();
+</script>
+</body>
+</html>

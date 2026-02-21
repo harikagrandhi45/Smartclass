@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Teacher Dashboard</title>
+<style>
+body{font-family:Arial;padding:20px;background:#f4f7fb}
+h1{color:#009879}
+button{padding:8px 12px;margin:5px;border:none;border-radius:6px;background:#009879;color:white;cursor:pointer}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{border:1px solid #ddd;padding:6px;text-align:center;cursor:pointer}
+th{background:#009879;color:white}
+.lab{background:#c8e6c9}
+.swap-approved{background:#fff3cd}
+.leave-approved{background:#ffcdd2}
+.form-box{background:white;padding:15px;margin-top:15px;border-radius:8px}
+</style>
+</head>
+<body>
+
+<h1>Teacher Dashboard</h1>
+
+<button onclick="openSwapForm()">Request Swap</button>
+<button onclick="openLeaveForm()">Apply Leave</button>
+<button onclick="logout()">Logout</button>
+
+<div id="formArea"></div>
+<div id="timetable"></div>
+
+<script>
+const API="http://localhost:5000";
+const token=localStorage.getItem("sc_token");
+const role=localStorage.getItem("sc_role");
+const teacherName=localStorage.getItem("sc_name");
+
+if(!token || role!=="teacher"){
+alert("Unauthorized"); window.location.href="login.html";
+}
+
+function headers(){
+return {"Content-Type":"application/json","Authorization":"Bearer "+token};
+}
+
+/* ================= LOAD DATA ================= */
+
+let schedules=[], swaps=[], leaves=[];
+
+async function load(){
+const [sRes,swRes,lRes]=await Promise.all([
+fetch(API+"/schedules",{headers:headers()}),
+fetch(API+"/swaps",{headers:headers()}),
+fetch(API+"/leaves",{headers:headers()})
+]);
+
+schedules=(await sRes.json()).filter(s=>s.faculty.toLowerCase()===teacherName.toLowerCase());
+swaps=(await swRes.json()).filter(s=>s.fromFaculty.toLowerCase()===teacherName.toLowerCase());
+leaves=(await lRes.json()).filter(l=>l.faculty.toLowerCase()===teacherName.toLowerCase());
+
+render();
+}
+load();
+
+/* ================= RENDER ================= */
+
+function render(){
+
+if(schedules.length===0){
+document.getElementById("timetable").innerHTML="No Schedule";
+return;
+}
+
+const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+/* SORT TIMES MORNING → EVENING */
+const times=[...new Set(schedules.map(e=>e.time))].sort((a,b)=>{
+
+function getMinutes(t){
+const start=t.split("-")[0].trim();
+const parts=start.split(":");
+const hour=parseInt(parts[0]);
+const minute=parseInt(parts[1]);
+return hour*60+minute;
+}
+
+return getMinutes(a)-getMinutes(b);
+});
+
+let html="<table><tr><th>Day/Time</th>";
+times.forEach(t=>html+="<th>"+t+"</th>");
+html+="</tr>";
+
+days.forEach(day=>{
+html+="<tr><td>"+day+"</td>";
+times.forEach(time=>{
+const e=schedules.find(x=>x.day===day&&x.time===time);
+if(e){
+
+let cls="";
+if(e.subject.toLowerCase().includes("lab")) cls="lab";
+
+const approvedSwap=swaps.find(s=>s.day===day&&s.time===time&&s.status==="approved");
+if(approvedSwap) cls="swap-approved";
+
+const approvedLeave=leaves.find(l=>l.status==="approved");
+if(approvedLeave) cls="leave-approved";
+
+html+=`<td class="${cls}" onclick="autoFillSwap('${e.grade}','${day}','${time}')">
+${e.subject}<br>${e.grade}
+</td>`;
+}else html+="<td>-</td>";
+});
+html+="</tr>";
+});
+
+html+="</table>";
+document.getElementById("timetable").innerHTML=html;
+}
+
+/* ================= AUTO FILL ================= */
+
+function autoFillSwap(grade,day,time){
+openSwapForm();
+document.getElementById("swapGrade").value=grade;
+document.getElementById("swapDay").value=day;
+document.getElementById("swapTime").value=time;
+}
+
+/* ================= SWAP ================= */
+
+function openSwapForm(){
+document.getElementById("formArea").innerHTML=`
+<div class="form-box">
+<h3>Request Swap</h3>
+Grade:<br><input id="swapGrade"><br><br>
+Day:<br><input id="swapDay"><br><br>
+Time:<br><input id="swapTime"><br><br>
+Substitute Faculty:<br><input id="swapTo"><br><br>
+<button onclick="submitSwap()">Submit</button>
+</div>`;
+}
+
+async function submitSwap(){
+
+const grade=document.getElementById("swapGrade").value;
+const day=document.getElementById("swapDay").value;
+const time=document.getElementById("swapTime").value;
+const to=document.getElementById("swapTo").value;
+
+if(!to){ alert("Select substitute faculty"); return; }
+
+/* Prevent duplicate */
+const exists=swaps.find(s=>s.day===day&&s.time===time&&s.status==="pending");
+if(exists){ alert("Swap already requested for this period"); return; }
+
+/* Prevent substitute clash */
+const clash=schedules.find(s=>s.day===day&&s.time===time&&s.faculty===to);
+if(clash){ alert("Substitute already busy at this time"); return; }
+
+await fetch(API+"/swaps",{
+method:"POST",
+headers:headers(),
+body:JSON.stringify({
+fromFaculty:teacherName,
+toFaculty:to,
+grade,
+day,
+time
+})
+});
+
+alert("Swap Requested");
+load();
+}
+
+/* ================= LEAVE ================= */
+
+function openLeaveForm(){
+document.getElementById("formArea").innerHTML=`
+<div class="form-box">
+<h3>Apply Leave</h3>
+From:<br><input type="date" id="leaveFrom"><br><br>
+To:<br><input type="date" id="leaveTo"><br><br>
+Reason:<br><input id="leaveReason"><br><br>
+<button onclick="submitLeave()">Submit</button>
+</div>`;
+}
+
+async function submitLeave(){
+
+await fetch(API+"/leaves",{
+method:"POST",
+headers:headers(),
+body:JSON.stringify({
+faculty:teacherName,
+from:document.getElementById("leaveFrom").value,
+to:document.getElementById("leaveTo").value,
+reason:document.getElementById("leaveReason").value
+})
+});
+
+alert("Leave Requested");
+load();
+}
+
+function logout(){
+localStorage.clear();
+window.location.href="login.html";
+}
+</script>
+
+</body>
+</html>

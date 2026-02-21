@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Manage Swap Requests</title>
+<style>
+body { font-family: Arial, sans-serif; margin:0; background:#f9fafb; padding:20px; }
+h1 { color:#004d40; }
+.request { background:#fff; padding:12px; margin:10px 0; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+button { padding:6px 10px; border:none; border-radius:5px; cursor:pointer; font-size:14px; margin:5px; }
+.approve { background:#16a34a; color:white; }
+.reject { background:#dc2626; color:white; }
+.delete { background:#6b7280; color:white; }
+.back { background:linear-gradient(90deg,#009879,#2bb8f2); color:white; margin-bottom:20px; }
+select { padding:4px; border-radius:5px; }
+small.hint{display:block;color:#666;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>🔄 Manage Swap Requests</h1>
+<a href="admin.html"><button class="back">← Back to Dashboard</button></a>
+<div id="swapRequests"></div>
+
+<script>
+const API_BASE = "http://localhost:5000";
+const token = localStorage.getItem("sc_token") || "";
+function authHeaders(){ const h = {"Content-Type":"application/json"}; if(token) h["Authorization"]="Bearer "+token; return h; }
+async function apiFetch(path, opts={}){ opts.headers = {...(opts.headers||{}), ...authHeaders()}; const res = await fetch(API_BASE+path, opts); if(!res.ok) throw new Error((await res.json()).message || res.statusText); return res.json(); }
+
+/* fallback */
+function readJSON(k,f){ try{ const v = localStorage.getItem(k); return v?JSON.parse(v):f }catch(e){return f} }
+function writeJSON(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+
+async function loadSwaps(){
+  try {
+    // server uses /swaps
+    const list = await apiFetch('/swaps');
+    renderSwaps(list);
+    return;
+  } catch(e){
+    // fallback local key 'swap_requests'
+    const local = readJSON('swap_requests', []);
+    renderSwaps(local);
+  }
+}
+
+function renderSwaps(list){
+  const c = document.getElementById('swapRequests'); c.innerHTML = '';
+  if(!list || list.length===0){ c.innerHTML = '<p>No swap requests.</p>'; return; }
+  // If server objects have _id use it, else assume local array indices
+  list.forEach((r, i) => {
+    const div = document.createElement('div'); div.className = 'request';
+    // build faculty select if we have faculty list
+    const facultyList = readJSON('faculty', []).map(f=> f.name || f);
+    let options = `<option value="">-- Select Substitute --</option>`;
+    facultyList.forEach(f => { const sel = (r.toFaculty === f || r.to === f) ? 'selected' : ''; options += `<option value="${escapeAttr(f)}" ${sel}>${escapeHtml(f)}</option>`; });
+    div.innerHTML = `<b>${escapeHtml(r.fromFaculty || r.from || r.faculty || 'Unknown')}</b> requests swap<br>
+                     <b>${escapeHtml(r.grade)}</b> • ${escapeHtml(r.day)} ${escapeHtml(r.time)}<br>
+                     Substitute: <select onchange="updateSubstitute('${r._id||i}',this.value)">${options}</select><br>
+                     Status: <b>${escapeHtml(r.status||'pending')}</b>
+                     <div style="margin-top:8px">
+                       <button class="approve" onclick="approve('${r._id||i}')">Approve</button>
+                       <button class="reject" onclick="rejectReq('${r._id||i}')">Reject</button>
+                       <button class="delete" onclick="deleteReq('${r._id||i}')">🗑 Delete</button>
+                     </div>
+                     <small class="hint">Server-backed if available; otherwise localStorage</small>`;
+    c.appendChild(div);
+  });
+}
+
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return String(s||'').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+
+/* updates */
+async function updateSubstitute(idOrIndex, val){
+  // try server update via PUT /swaps/:id with body { toFaculty: val }
+  if(idOrIndex.length === 24){
+    try { await apiFetch(`/swaps/${idOrIndex}`, { method: 'PUT', body: JSON.stringify({ toFaculty: val }) }); await loadSwaps(); return; } catch(e){ /* fallback below */ }
+  }
+  // fallback local
+  const arr = readJSON('swap_requests', []);
+  const idx = Number(idOrIndex);
+  if(arr[idx]){ arr[idx].toFaculty = val; writeJSON('swap_requests', arr); loadSwaps(); }
+}
+
+async function approve(idOrIndex){
+  // server has PUT /swaps/:id/approve
+  if(idOrIndex.length === 24){
+    try { await apiFetch(`/swaps/${idOrIndex}/approve`, { method: 'PUT' }); await loadSwaps(); alert('Approved on server'); return; } catch(e){ /* fallback */ }
+  }
+  // fallback local
+  const arr = readJSON('swap_requests', []);
+  const idx = Number(idOrIndex);
+  if(arr[idx]){ arr[idx].status = 'approved'; // also update local schedules
+    const schedules = readJSON('schedules', []);
+    const req = arr[idx];
+    const entry = schedules.find(s => s.grade===req.grade && s.day===req.day && s.time===req.time && s.faculty===req.fromFaculty);
+    if(entry) entry.faculty = req.toFaculty || entry.faculty;
+    writeJSON('schedules', schedules);
+    writeJSON('swap_requests', arr);
+    loadSwaps();
+    alert('Approved locally');
+  }
+}
+
+async function rejectReq(idOrIndex){
+  if(idOrIndex.length === 24){
+    try { await apiFetch(`/swaps/${idOrIndex}/reject`, { method: 'PUT' }); await loadSwaps(); alert('Rejected on server'); return; } catch(e){ }
+  }
+  const arr = readJSON('swap_requests', []);
+  const idx = Number(idOrIndex);
+  if(arr[idx]){ arr[idx].status = 'rejected'; writeJSON('swap_requests', arr); loadSwaps(); alert('Rejected locally'); }
+}
+
+async function deleteReq(idOrIndex){
+  if(!confirm('Delete this request?')) return;
+  if(idOrIndex.length === 24){
+    try { await apiFetch(`/swaps/${idOrIndex}`, { method: 'DELETE' }); await loadSwaps(); alert('Deleted on server'); return; } catch(e){ }
+  }
+  const arr = readJSON('swap_requests', []);
+  const idx = Number(idOrIndex);
+  if(arr[idx]){ arr.splice(idx,1); writeJSON('swap_requests', arr); loadSwaps(); alert('Deleted locally'); }
+}
+
+/* add new swap (used by faculty UI) - kept for completeness */
+async function createSwap(payload){
+  try {
+    const created = await apiFetch('/swaps', { method: 'POST', body: JSON.stringify(payload) });
+    await loadSwaps();
+    return created;
+  } catch(e){
+    const arr = readJSON('swap_requests', []);
+    arr.unshift(payload);
+    writeJSON('swap_requests', arr);
+    loadSwaps();
+    return payload;
+  }
+}
+
+/* startup */
+loadSwaps();
+</script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Manage Subjects</title>
+<style>
+  /* keep your existing styles */
+  body { font-family: Arial, sans-serif; background: #f9fafb; margin: 0; padding: 0; }
+  h1 { text-align: center; background: #004d40; color: white; padding: 20px; margin: 0; }
+  .container { width: 90%; margin: 30px auto; }
+  a { display: inline-block; margin-bottom: 20px; text-decoration: none; color: #004d40; font-weight: bold; }
+  .form-section, .table-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); margin-bottom: 30px; }
+  select, input[type="text"] { padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  button { background: #00796b; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 14px; margin: 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  table th, table td { border: 1px solid #e0e0e0; padding: 10px; text-align: center; font-size: 14px; }
+  table th { background: #004d40; color: white; }
+  .muted { color:#666; font-size:13px; }
+  .grade-label { font-weight:700; color:#064945; margin:6px 0; }
+</style>
+</head>
+<body>
+<h1>Manage Subjects per Grade</h1>
+<div class="container">
+  <a href="index.html">← Back to Dashboard</a>
+  <div class="form-section">
+    <select id="subjectGrade"></select>
+    <input type="text" id="subjectName" placeholder="Subject Name">
+    <select id="subjectType">
+      <option value="Theory">Theory</option>
+      <option value="Lab">Lab</option>
+      <option value="Extra Curricular">Extra Curricular</option>
+    </select>
+    <select id="subjectFaculty"></select>
+    <button id="addSubjectBtn">➕ Add Subject</button>
+    <button id="refreshBtn" style="background:#0b74de;margin-left:6px">🔄 Refresh</button>
+  </div>
+
+  <div class="table-section">
+    <table id="subjectTable">
+      <tr><th>Grade</th><th>Subject</th><th>Type</th><th>Faculty</th><th>Action</th></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:5000";
+const token = localStorage.getItem("sc_token") || "";
+function authHeaders(){ const h = {"Content-Type":"application/json"}; if(token) h["Authorization"]="Bearer "+token; return h; }
+async function apiFetch(path, opts={}){ opts.headers = {...(opts.headers||{}), ...authHeaders()}; const res = await fetch(API_BASE+path, opts); if(!res.ok) throw new Error((await res.json()).message || res.statusText); return res.json(); }
+
+/* local fallback */
+function readJSON(k,f){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):f }catch(e){return f} }
+function writeJSON(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+
+let grades = [], faculty = [], subjectsMap = {};
+
+/* initialize: try server, else local */
+async function init(){
+  try { grades = await apiFetch('/grades'); } catch(e){ grades = readJSON('grades', []); }
+  try { faculty = await apiFetch('/faculty'); } catch(e){ faculty = readJSON('faculty', []); }
+
+  // subjects on server: GET /subjects returns all; we'll shape into map
+  try {
+    const serverSubjects = await apiFetch('/subjects');
+    subjectsMap = {};
+    serverSubjects.forEach(s => {
+      const grade = s.grade || s.gradeName || ((s.year && s.branch && s.section) ? `${s.year}-${s.branch}-${s.section}` : 'Unknown');
+      if(!subjectsMap[grade]) subjectsMap[grade]=[];
+      subjectsMap[grade].push({ subject: s.subject, type: s.type, faculty: s.faculty, id: s._id });
+    });
+  } catch(e){
+    subjectsMap = readJSON('subjects', {});
+  }
+
+  updateDropdowns();
+  renderSubjects(); // default: show all
+}
+
+/* update the grade dropdown and faculty */
+function updateDropdowns(){
+  const gSel = document.getElementById('subjectGrade'); gSel.innerHTML='';
+  // Add a special "All Grades" option
+  gSel.innerHTML = '<option value="__ALL__">-- All Grades --</option>';
+
+  if(!grades || grades.length===0){
+    // If no server grades, create from subjectsMap keys or defaults
+    const keys = Object.keys(subjectsMap);
+    if(keys.length){
+      keys.forEach(k => gSel.innerHTML += `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`);
+    } else {
+      gSel.innerHTML += `<option value="I-CSE-A">I-CSE-A</option>`;
+      gSel.innerHTML += `<option value="II-IT-A">II-IT-A</option>`;
+    }
+    gSel.disabled = false;
+  } else {
+    gSel.disabled = false;
+    grades.forEach(g=> {
+      const name = (g.year && g.branch && g.section) ? `${g.year}-${g.branch}-${g.section}` : (g.name||g);
+      gSel.innerHTML += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+    });
+  }
+
+  const fSel = document.getElementById('subjectFaculty'); fSel.innerHTML='';
+  if(!faculty || faculty.length===0){ fSel.innerHTML = '<option>No faculty</option>'; } else {
+    fSel.innerHTML = '<option value="">-- Select Faculty (optional) --</option>';
+    faculty.forEach(f => {
+      const fname = f.name || f;
+      fSel.innerHTML += `<option value="${escapeHtml(fname)}">${escapeHtml(fname)}</option>`;
+    });
+  }
+
+  // when grade changes, render filtered view
+  gSel.addEventListener('change', ()=> {
+    const val = gSel.value;
+    if(val === '__ALL__') renderSubjects();
+    else renderSubjects(val);
+  });
+}
+
+/* renderSubjects optionally accept gradeFilter (exact match) */
+function renderSubjects(gradeFilter){
+  const table = document.getElementById('subjectTable');
+  table.innerHTML = '<tr><th>Grade</th><th>Subject</th><th>Type</th><th>Faculty</th><th>Action</th></tr>';
+
+  // If gradeFilter provided, show only that grade
+  if(gradeFilter){
+    const arr = subjectsMap[gradeFilter] || [];
+    if(arr.length === 0){
+      table.innerHTML += `<tr><td colspan="5" class="muted">No subjects found for ${escapeHtml(gradeFilter)}</td></tr>`;
+      return;
+    }
+    arr.forEach((s, i) => {
+      table.innerHTML += `<tr>
+        <td>${escapeHtml(gradeFilter)}</td>
+        <td>${escapeHtml(s.subject)}</td>
+        <td>${escapeHtml(s.type)}</td>
+        <td>${escapeHtml(s.faculty||'-')}</td>
+        <td>
+          <button onclick="editSubject('${escapeAttr(gradeFilter)}','${s.id||i}')">Edit</button>
+          <button onclick="deleteSubject('${escapeAttr(gradeFilter)}','${s.id||i}')">Delete</button>
+        </td>
+      </tr>`;
+    });
+    return;
+  }
+
+  // No filter: show all grades grouped
+  const gradeKeys = Object.keys(subjectsMap);
+  if(gradeKeys.length === 0){
+    table.innerHTML += `<tr><td colspan="5" class="muted">No subjects saved yet.</td></tr>`;
+    return;
+  }
+  gradeKeys.forEach(grade => {
+    const arr = subjectsMap[grade];
+    if(!arr || arr.length === 0) return;
+    // optional header row per grade
+    table.innerHTML += `<tr><td colspan="5" class="grade-label" style="text-align:left">Grade: ${escapeHtml(grade)}</td></tr>`;
+    arr.forEach((s, i) => {
+      table.innerHTML += `<tr>
+        <td>${escapeHtml(grade)}</td>
+        <td>${escapeHtml(s.subject)}</td>
+        <td>${escapeHtml(s.type)}</td>
+        <td>${escapeHtml(s.faculty||'-')}</td>
+        <td>
+          <button onclick="editSubject('${escapeAttr(grade)}','${s.id||i}')">Edit</button>
+          <button onclick="deleteSubject('${escapeAttr(grade)}','${s.id||i}')">Delete</button>
+        </td>
+      </tr>`;
+    });
+  });
+}
+
+/* helpers */
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return String(s||'').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+
+/* Add subject (unchanged main flow except we now always re-show ALL saved data after add) */
+document.getElementById('addSubjectBtn').addEventListener('click', async ()=>{
+  const grade = document.getElementById('subjectGrade').value;
+  const sub = document.getElementById('subjectName').value.trim();
+  const type = document.getElementById('subjectType').value;
+  const fac = document.getElementById('subjectFaculty').value;
+  if(!grade || !sub){ alert('Fill required fields'); return; }
+
+  const payload = { grade, subject: sub, type, faculty: fac };
+  try {
+    const created = await apiFetch('/subjects', { method: 'POST', body: JSON.stringify(payload) });
+    // refresh server subjects (keep existing init function)
+    await init();
+    document.getElementById('subjectName').value='';
+    alert('Subject added on server.');
+    // ---------- CHANGED: always show ALL saved data (do not switch/hide other grades) ----------
+    renderSubjects(); // show everything (previously it could show only the added grade)
+    return;
+  } catch(e){
+    // fallback local
+    if(!subjectsMap[grade]) subjectsMap[grade] = [];
+    subjectsMap[grade].push({ subject: sub, type, faculty: fac });
+    writeJSON('subjects', subjectsMap);
+    // ---------- CHANGED: always show ALL saved data after a local save as well ----------
+    renderSubjects(); // show everything instead of hiding other grades
+    document.getElementById('subjectName').value='';
+    alert('Subject saved locally (server unavailable).');
+  }
+});
+
+/* Edit subject (unchanged logic) */
+async function editSubject(grade, idOrIndex){
+  const isServerId = idOrIndex && idOrIndex.length === 24;
+  if(isServerId){
+    try {
+      const subj = subjectsMap[grade].find(s => s.id === idOrIndex);
+      const newName = prompt('Subject name:', subj.subject);
+      if(newName === null) return;
+      const newType = prompt('Type:', subj.type) || subj.type;
+      const newFac = prompt('Faculty:', subj.faculty) || subj.faculty;
+      await apiFetch(`/subjects/${idOrIndex}`, { method: 'PUT', body: JSON.stringify({ subject:newName, type:newType, faculty:newFac }) });
+      await init();
+      alert('Updated on server.');
+      return;
+    } catch(e){ alert('Server update failed: ' + e.message); return; }
+  } else {
+    const idx = Number(idOrIndex);
+    const subjObj = subjectsMap[grade][idx];
+    const newName = prompt('Subject name:', subjObj.subject);
+    if(newName === null) return;
+    const newType = prompt('Type:', subjObj.type) || subjObj.type;
+    const newFac = prompt('Faculty:', subjObj.faculty) || subjObj.faculty;
+    subjectsMap[grade][idx] = { subject: newName, type: newType, faculty: newFac };
+    writeJSON('subjects', subjectsMap);
+    renderSubjects(document.getElementById('subjectGrade').value === '__ALL__' ? null : document.getElementById('subjectGrade').value);
+  }
+}
+
+/* Delete subject (unchanged logic) */
+async function deleteSubject(grade, idOrIndex){
+  if(!confirm('Delete this subject?')) return;
+  const isServerId = idOrIndex && idOrIndex.length === 24;
+  if(isServerId){
+    try {
+      await apiFetch(`/subjects/${idOrIndex}`, { method: 'DELETE' });
+      await init();
+      alert('Deleted on server.');
+      return;
+    } catch(e){ alert('Server delete failed: ' + e.message); return; }
+  } else {
+    const idx = Number(idOrIndex);
+    subjectsMap[grade].splice(idx,1);
+    writeJSON('subjects', subjectsMap);
+    renderSubjects(document.getElementById('subjectGrade').value === '__ALL__' ? null : document.getElementById('subjectGrade').value);
+  }
+}
+
+/* Refresh button */
+document.getElementById('refreshBtn').addEventListener('click', async ()=>{
+  await init();
+  const sel = document.getElementById('subjectGrade').value;
+  renderSubjects(sel === '__ALL__' ? null : sel);
+});
+
+/* startup */
+init();
+</script>
+</body>
+</html>

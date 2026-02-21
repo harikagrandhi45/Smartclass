@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartClass - AI Classroom Scheduling</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background: #fefefe; }
+
+    /* Header */
+    header { 
+      display: flex; justify-content: space-between; align-items: center; 
+      padding: 20px 50px; background: #fff; position: fixed; width: 100%; 
+      top: 0; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+    }
+    header h1 { color: #009879; }
+    nav a { margin: 0 15px; text-decoration: none; color: #333; font-weight: bold; }
+    nav a:hover { color: #009879; }
+    .btn-primary { background: linear-gradient(90deg,#009879,#2bb8f2); color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; }
+    .btn-primary:hover { opacity: 0.9; }
+
+    /* Hero */
+    section { padding: 80px 50px; }
+    .hero { display: flex; align-items: center; justify-content: space-between; min-height: 100vh; padding-top: 80px; }
+    .hero-text { max-width: 50%; }
+    .hero-text h2 { font-size: 55px; margin-bottom: 20px; }
+    .hero-text span { color: #009879; }
+    .hero-text p { margin-bottom: 30px; color: #555; }
+    .hero-buttons a { margin-right: 15px; }
+    .hero img { max-width: 550px; border-radius: 12px;}
+    .hero:  hover {
+      transform: scale(1.05);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.15)}
+
+    /* Features */
+    .features { text-align: center; padding: 60px 20px; }
+    .features h2 { font-size: 36px; margin-bottom: 20px; }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 400px); /* 3 cards per row */
+      justify-content: center; /* center grid */
+      gap: 30px;
+      margin-top: 40px;
+    }
+    .card {
+      padding: 20px;
+      border: 1px solid #eee;
+      border-radius: 15px;
+      background: #fff;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      text-align: left;
+    }
+    .card:hover {
+      transform: scale(1.05);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+    }
+    .card .icon {
+      font-size: 40px;
+      margin-bottom: 15px;
+      color: #3c3e3e;
+    }
+    .card .tag {
+      display: inline-block;
+      background: #009879;
+      color: #fff;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+    }
+    .card h3 { margin-bottom: 10px; color: #009879; }
+
+    /* Responsive */
+    @media (max-width: 992px) {
+      .feature-grid { grid-template-columns: repeat(2, 280px); }
+    }
+    @media (max-width: 600px) {
+      .feature-grid { grid-template-columns: 1fr; }
+      .hero { flex-direction: column; text-align: center; }
+      .hero-text { max-width: 100%; margin-bottom: 30px; }
+      .hero img { max-width: 100%; }
+    }
+
+    /* Footer */
+    footer { background: #222; color: #ddd; padding: 50px; display: flex; justify-content: space-between; flex-wrap: wrap; margin-top: 60px; }
+    footer h3 { color: #fff; margin-bottom: 15px; }
+    footer a { display: block; color: #aaa; text-decoration: none; margin-bottom: 8px; }
+    footer a:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <h1>Smart Classroom Scheduler</h1>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <a href="login.html" class="btn-primary">Log in / Sign up</a>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero" id="home">
+    <div class="hero-text">
+      <h2>Smart Classroom <span>Scheduling</span> Made Simple</h2>
+      <p>Revolutionize your institution with AI-powered timetable management. Optimize resources, eliminate conflicts, and create the perfect learning environment.
+A Smart Classroom Scheduling app is a digital solution designed to automate and optimize the process of creating class timetables in schools, colleges, or universities.
+
+Instead of manually preparing schedules (which often leads to errors like overlapping classes, underutilized rooms, or uneven faculty workload), the app uses technology (AI, algorithms, or rules-based engines) to generate efficient timetables.</p>
+      <div class="hero-buttons">
+        <a href="#features" class="btn-primary">Watch Demo</a>
+      </div>
+    </div>
+    <img src="classroom.jpg" alt="Classroom Demo">
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <h2>Everything You Need for <span style="color:#009879;">Smart Scheduling</span></h2>
+    <div class="feature-grid">
+      
+      <div class="card">
+        <div class="icon"><i class="fas fa-brain"></i></div>
+        <span class="tag">Smart AI</span>
+        <h3>AI-Powered Optimization</h3>
+        <p>Advanced algorithms automatically create optimal schedules, considering all constraints and preferences.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon"><i class="fas fa-sync-alt"></i></div>
+        <span class="tag">Live Updates</span>
+        <h3>Real-Time Adjustments</h3>
+        <p>Instantly adapt to changes like teacher absences or room maintenance with automatic rescheduling.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon"><i class="fas fa-map-marker-alt"></i></div>
+        <span class="tag">Optimize</span>
+        <h3>Resource Management</h3>
+        <p>Track and optimize classroom usage, equipment availability, and facility resources efficiently.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon"><i class="fas fa-users"></i></div>
+        <span class="tag">Collaborative</span>
+        <h3>Multi-Stakeholder Portal</h3>
+        <p>Separate dashboards for administrators, teachers, and students with role-based permissions.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon"><i class="fas fa-chart-line"></i></div>
+        <span class="tag">Data-Driven</span>
+        <h3>Analytics & Insights</h3>
+        <p>Comprehensive reports on resource utilization, scheduling efficiency, and performance metrics.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon"><i class="fas fa-shield-alt"></i></div>
+        <span class="tag">Reliable</span>
+        <h3>Conflict Resolution</h3>
+        <p>Automatically detect and resolve scheduling conflicts before they impact your operations.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Footer / Contact -->
+  <footer id="contact">
+    <div>
+      <h3>SmartClass</h3>
+      <p>Revolutionizing education with AI-powered classroom scheduling and resource management.</p>
+    </div>
+    <div>
+      <h3>Product</h3>
+      <a href="#features">Features</a>
+      <a href="#api">API Documentation</a>
+      <a href="#integrations">Integrations</a>
+      <a href="#security">Security</a>
+    </div>
+    <div>
+      <h3>Solutions</h3>
+      <a href="#schools">Vignan's IIT</a>
+      <a href="#universities">Autonomous</a>
+      <a href="#training">Visakhapatnam</a>
+    </div>
+    <div>
+      <h3>Contact</h3>
+      <p>Email: hello@smartclass.ai</p>
+      <p>Phone: +91 1234567890</p>
+      <p>123, ABC road, XYZ city</p>
+    </div>
+  </footer>
+
+</body>
+</html>

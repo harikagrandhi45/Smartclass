@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automatic Timetable Generator</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<style>
+body { font-family: Arial, sans-serif; background:#f4f6f9; margin:0; }
+h1 { text-align:center; background:#004d40; color:white; padding:20px; }
+.container { width:95%; margin:20px auto; }
+
+button {
+    padding:8px 15px;
+    border:none;
+    border-radius:6px;
+    background:#00796b;
+    color:white;
+    cursor:pointer;
+    margin-bottom:15px;
+    margin-right:10px;
+}
+button:hover { background:#00695c; }
+
+table { width:100%; border-collapse:collapse; margin-bottom:40px; }
+th, td { border:1px solid #ccc; padding:8px; text-align:center; font-size:13px; }
+th { background:#004d40; color:white; }
+
+.grade-title { background:#00695c; color:white; padding:8px; margin-top:30px; }
+
+.break-cell { background:#ffe0b2; font-weight:bold; }
+
+/* NEW: Lab highlight style */
+.lab-cell {
+    background:#c8e6c9;
+    font-weight:bold;
+    color:#1b5e20;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Weekly Automatic Timetable Generator</h1>
+
+<div class="container">
+<button onclick="generateTimetable()">Generate Timetable</button>
+<button onclick="downloadPDF()">Save Timetable as PDF</button>
+<div id="output"></div>
+</div>
+
+<script>
+const API = "http://localhost:5000";
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+let classroomUsage = {};
+let facultyUsage = {};
+
+window.onload = function(){
+    const saved = localStorage.getItem("savedTimetable");
+    if(saved){
+        document.getElementById("output").innerHTML = saved;
+    }
+};
+
+function getHeaders(){
+  const token = localStorage.getItem("sc_token") || "";
+  const h = {"Content-Type":"application/json"};
+  if(token) h["Authorization"]="Bearer "+token;
+  return h;
+}
+
+async function fetchData(endpoint){
+  const res = await fetch(API + endpoint, { headers:getHeaders() });
+  if(!res.ok) throw new Error("Failed " + endpoint);
+  return res.json();
+}
+
+function getShiftStructure(shift){
+if(shift === "Shift-1"){
+    return [
+        {type:"period", label:"8:00-8:50"},
+        {type:"period", label:"8:50-9:40"},
+        {type:"break",  label:"Break (9:40-10:00)"},
+        {type:"period", label:"10:00-10:50"},
+        {type:"period", label:"10:50-11:40"},
+        {type:"period", label:"11:40-12:30"},
+        {type:"break",  label:"Lunch (12:30-1:20)"},
+        {type:"period", label:"1:20-2:10"},
+        {type:"period", label:"2:10-3:00"}
+    ];
+}
+else{
+    return [
+        {type:"period", label:"10:00-10:50"},
+        {type:"period", label:"10:50-11:40"},
+        {type:"period", label:"11:40-12:30"},
+        {type:"period", label:"12:30-1:20"},
+        {type:"break",  label:"Break (1:20-2:10)"},
+        {type:"period", label:"2:10-3:00"},
+        {type:"period", label:"3:00-3:50"},
+        {type:"break",  label:"Break (3:50-4:10)"},
+        {type:"period", label:"4:10-5:00"}
+    ];
+}
+}
+
+function isAvailable(map, key){ return !map[key]; }
+function markUsed(map, key){ map[key] = true; }
+
+async function generateTimetable(){
+
+try{
+
+classroomUsage = {};
+facultyUsage = {};
+
+const grades = await fetchData("/grades");
+const classrooms = await fetchData("/classrooms");
+const labs = await fetchData("/labs");
+const subjects = await fetchData("/subjects");
+
+let outputHTML = "";
+
+for(const grade of grades){
+
+let gradeName = `${grade.year}-${grade.branch}-${grade.section}`;
+let gradeSubjects = subjects.filter(s => s.grade === gradeName);
+
+let theorySubjects = gradeSubjects.filter(s => s.type !== "Lab");
+let labSubjects = gradeSubjects.filter(s => s.type === "Lab");
+
+let structure = getShiftStructure(grade.shift);
+
+let timetable = {};
+DAYS.forEach(day => {
+    timetable[day] = structure.map(slot => 
+        slot.type === "period" ? null : slot
+    );
+});
+
+/* ===== LAB Allocation ===== */
+for(const labSub of labSubjects){
+let placed = false;
+for(let attempts=0; attempts<50 && !placed; attempts++){
+    let randomDay = DAYS[Math.floor(Math.random()*DAYS.length)];
+    for(let i=0;i<structure.length-1;i++){
+        if(structure[i].type !== "period") continue;
+        if(structure[i+1].type !== "period") continue;
+        if(timetable[randomDay][i] !== null) continue;
+        if(timetable[randomDay][i+1] !== null) continue;
+
+        let room = labs[Math.floor(Math.random()*labs.length)];
+        if(!room) continue;
+
+        let key1 = randomDay+"-"+i;
+        let key2 = randomDay+"-"+(i+1);
+
+        let roomKey1 = room._id+"-"+key1;
+        let roomKey2 = room._id+"-"+key2;
+
+        let facultyKey1 = labSub.faculty+"-"+key1;
+        let facultyKey2 = labSub.faculty+"-"+key2;
+
+        if(isAvailable(classroomUsage,roomKey1) &&
+           isAvailable(classroomUsage,roomKey2) &&
+           isAvailable(facultyUsage,facultyKey1) &&
+           isAvailable(facultyUsage,facultyKey2)){
+
+            markUsed(classroomUsage,roomKey1);
+            markUsed(classroomUsage,roomKey2);
+            markUsed(facultyUsage,facultyKey1);
+            markUsed(facultyUsage,facultyKey2);
+
+            timetable[randomDay][i] = {...labSub, classroom:room.name, time:structure[i].label};
+            timetable[randomDay][i+1] = {...labSub, classroom:room.name, time:structure[i+1].label};
+
+            placed = true;
+            break;
+        }
+    }
+}
+}
+
+/* ===== Theory Fill ===== */
+for(const day of DAYS){
+for(let i=0;i<structure.length;i++){
+if(structure[i].type !== "period") continue;
+if(timetable[day][i] !== null) continue;
+
+let sub = theorySubjects[Math.floor(Math.random()*theorySubjects.length)];
+if(sub){
+let room = classrooms[Math.floor(Math.random()*classrooms.length)];
+timetable[day][i] = {
+    ...sub,
+    classroom: room ? room.name : "",
+    time: structure[i].label
+};
+}else{
+timetable[day][i] = {subject:"Free"};
+}
+}
+}
+
+/* ===== SAVE TO BACKEND ===== */
+let schedulesToSave = [];
+
+for(const day of DAYS){
+for(let i=0;i<structure.length;i++){
+    if(structure[i].type !== "period") continue;
+
+    let cell = timetable[day][i];
+    if(cell && cell.subject && cell.subject !== "Free"){
+        schedulesToSave.push({
+            grade: gradeName,
+            subject: cell.subject,
+            faculty: cell.faculty,
+            classroom: cell.classroom,
+            day: day,
+            time: structure[i].label
+        });
+    }
+}
+}
+
+/* Send to MongoDB */
+await fetch(API + "/schedules", {
+    method:"POST",
+    headers:getHeaders(),
+    body: JSON.stringify({
+        grade: gradeName,
+        schedules: schedulesToSave
+    })
+});
+
+/* ===== Render HTML ===== */
+outputHTML += `<div class="grade-title">${gradeName} (${grade.shift})</div>`;
+outputHTML += `<table><tr><th>Day</th>`;
+structure.forEach(slot => outputHTML += `<th>${slot.label}</th>`);
+outputHTML += `</tr>`;
+
+for(const day of DAYS){
+outputHTML += `<tr><th>${day}</th>`;
+for(let i=0;i<structure.length;i++){
+if(structure[i].type === "break"){
+outputHTML += `<td class="break-cell">${structure[i].label}</td>`;
+}else{
+let cell = timetable[day][i];
+if(cell && cell.subject && cell.subject !== "Free"){
+let cellClass = cell.type === "Lab" ? "lab-cell" : "";
+outputHTML += `<td class="${cellClass}">
+<b>${cell.subject}</b><br>
+${cell.faculty || ""}<br>
+<small>${cell.classroom || ""}</small>
+</td>`;
+}else{
+outputHTML += `<td>Free</td>`;
+}
+}
+}
+outputHTML += `</tr>`;
+}
+outputHTML += `</table>`;
+}
+
+/* Save locally also */
+document.getElementById("output").innerHTML = outputHTML;
+localStorage.setItem("savedTimetable", outputHTML);
+
+alert("✅ Timetable Generated & Saved to MongoDB!");
+
+}catch(err){
+alert("Error: " + err.message);
+}
+}
+
+/* PDF Download */
+function downloadPDF(){
+const element = document.getElementById("output");
+if(!element.innerHTML.trim()){
+alert("Please generate timetable first!");
+return;
+}
+html2pdf().from(element).set({
+margin:0.3,
+filename:'Weekly_Timetable.pdf',
+jsPDF:{unit:'in',format:'a4',orientation:'landscape'}
+}).save();
+}
+</script>
+
+</body>
+</html>

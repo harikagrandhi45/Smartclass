@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Manage Grades</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#f9fafb; margin:0; padding:0; }
+  h1 { text-align:center; background:#004d40; color:white; padding:40px; margin:0; }
+  .container { width:90%; margin:30px auto; }
+  a { display:inline-block; margin-bottom:20px; text-decoration:none; color:#004d40; font-weight:bold; }
+  .form-section { background:white; padding:20px; border-radius:12px; box-shadow:0 4px 8px rgba(0,0,0,0.05); margin-bottom:30px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  input[type="text"], input[type="number"], input[list] { flex:1; min-width:150px; padding:10px; border:1px solid #ccc; border-radius:8px; font-size:14px; box-sizing:border-box; }
+  button { background:#00796b; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:bold; transition: background 0.2s; }
+  button:hover { background:#00695c; }
+  .table-section { background:white; padding:20px; border-radius:12px; box-shadow:0 4px 8px rgba(0,0,0,0.05); }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  table th, table td { border:1px solid #e0e0e0; padding:10px; text-align:center; font-size:14px; }
+  table th { background:#004d40; color:white; }
+</style>
+</head>
+<body>
+<h1>Manage Grades</h1>
+<div class="container">
+  <a href="index.html">← Back to Dashboard</a>
+
+  <div class="form-section">
+    <input list="yearOptions" id="gradeYear" placeholder="Enter or select Year">
+    <datalist id="yearOptions"></datalist>
+
+    <input list="branchOptions" id="gradeBranch" placeholder="Enter or select Branch">
+    <datalist id="branchOptions"></datalist>
+
+    <input list="sectionOptions" id="gradeSection" placeholder="Enter or select Section">
+    <datalist id="sectionOptions"></datalist>
+
+    <input list="shiftOptions" id="gradeShift" placeholder="Enter or select Shift">
+    <datalist id="shiftOptions">
+      <option value="Shift-1">
+      <option value="Shift-2">
+    </datalist>
+
+    <input type="number" id="gradeCapacity" placeholder="Capacity" min="1">
+    <button id="addGradeBtn">➕ Add Grade</button>
+  </div>
+
+  <div class="table-section">
+    <table id="gradeTable">
+      <tr><th>Year</th><th>Branch</th><th>Section</th><th>Shift</th><th>Capacity</th><th>Action</th></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:5000";
+const token = localStorage.getItem("sc_token") || "";
+function headers(){ const h = { "Content-Type":"application/json" }; if(token) h["Authorization"]="Bearer "+token; return h; }
+
+let yearOptions = ["I","II","III","IV"];
+let branchOptions = ["CSE","IT","AIDS","ECE","ECM","EEE","CIVIL","MECH"];
+let sectionOptions = ["A","B","C"];
+
+function renderOptions(){
+  document.getElementById("yearOptions").innerHTML = yearOptions.map(y=>`<option value="${y}">`).join("");
+  document.getElementById("branchOptions").innerHTML = branchOptions.map(b=>`<option value="${b}">`).join("");
+  document.getElementById("sectionOptions").innerHTML = sectionOptions.map(s=>`<option value="${s}">`).join("");
+}
+
+async function fetchGrades(){
+  try {
+    const res = await fetch(`${API_BASE}/grades`, { headers: headers() });
+    if(!res.ok) throw new Error((await res.json()).message || res.statusText);
+    const list = await res.json();
+    renderGrades(list);
+  } catch (err) { alert("Failed to load grades: " + err.message); }
+}
+
+function renderGrades(list){
+  const table = document.getElementById("gradeTable");
+  table.innerHTML = '<tr><th>Year</th><th>Branch</th><th>Section</th><th>Shift</th><th>Capacity</th><th>Action</th></tr>';
+  list.forEach(g => {
+    table.innerHTML += `<tr id="row-${g._id}">
+      <td>${escapeHtml(g.year)}</td>
+      <td>${escapeHtml(g.branch)}</td>
+      <td>${escapeHtml(g.section)}</td>
+      <td>${escapeHtml(g.shift)}</td>
+      <td>${escapeHtml(g.capacity)}</td>
+      <td>
+        <button onclick="editGrade('${g._id}')">Edit</button>
+        <button onclick="deleteGrade('${g._id}')">Delete</button>
+      </td>
+    </tr>`;
+  });
+}
+
+document.getElementById("addGradeBtn").addEventListener("click", async ()=>{
+  const year = document.getElementById("gradeYear").value.trim();
+  const branch = document.getElementById("gradeBranch").value.trim();
+  const section = document.getElementById("gradeSection").value.trim();
+  const shift = document.getElementById("gradeShift").value.trim();
+  const capacity = parseInt(document.getElementById("gradeCapacity").value, 10);
+
+  if(!year || !branch || !section || !shift || !capacity){ alert("Please fill all fields correctly"); return; }
+
+  try {
+    const res = await fetch(`${API_BASE}/grades`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ year, branch, section, shift, capacity })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.message || res.statusText);
+    // add to options lists for convenience
+    if(!yearOptions.includes(year)){ yearOptions.push(year); }
+    if(!branchOptions.includes(branch)){ branchOptions.push(branch); }
+    if(!sectionOptions.includes(section)){ sectionOptions.push(section); }
+    renderOptions();
+    fetchGrades();
+    // clear
+    document.getElementById("gradeYear").value = "";
+    document.getElementById("gradeBranch").value = "";
+    document.getElementById("gradeSection").value = "";
+    document.getElementById("gradeShift").value = "";
+    document.getElementById("gradeCapacity").value = "";
+  } catch (err) { alert("Add failed: " + err.message); }
+});
+
+async function editGrade(id){
+  // load current details (could be fetched or read from the row)
+  const row = document.getElementById(`row-${id}`);
+  if(!row) return;
+  // prompt for new values (simple approach)
+  const current = row.children;
+  const newYear = prompt("Year:", current[0].innerText) || current[0].innerText;
+  const newBranch = prompt("Branch:", current[1].innerText) || current[1].innerText;
+  const newSection = prompt("Section:", current[2].innerText) || current[2].innerText;
+  const newShift = prompt("Shift:", current[3].innerText) || current[3].innerText;
+  const newCapacity = parseInt(prompt("Capacity:", current[4].innerText) || current[4].innerText, 10);
+  if(!newYear || !newBranch || !newSection || !newShift || !newCapacity){ alert("Invalid input"); return; }
+
+  try {
+    const res = await fetch(`${API_BASE}/grades/${id}`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify({ year: newYear, branch: newBranch, section: newSection, shift: newShift, capacity: newCapacity })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.message || res.statusText);
+    fetchGrades();
+  } catch (err) { alert("Update failed: " + err.message); }
+}
+
+async function deleteGrade(id){
+  if(!confirm("Delete this grade?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/grades/${id}`, { method: "DELETE", headers: headers() });
+    if(!res.ok) throw new Error((await res.json()).message || res.statusText);
+    fetchGrades();
+  } catch (err) { alert("Delete failed: " + err.message); }
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* initial */
+renderOptions();
+fetchGrades();
+</script>
+</body>
+</html>

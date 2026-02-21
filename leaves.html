@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Manage Leave Requests</title>
+<style>
+body { font-family: Arial, sans-serif; margin:0; background:#f4f7f9; padding:20px; }
+h1 { color:#004d40; }
+.request { background:#fff; padding:12px; margin:10px 0; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+button { padding:6px 10px; border:none; border-radius:5px; cursor:pointer; font-size:14px; margin:5px; }
+.approve { background:#16a34a; color:white; }
+.reject { background:#dc2626; color:white; }
+.delete { background:#6b7280; color:white; }
+.back { background:linear-gradient(90deg,#009879,#2bb8f2); color:white; margin-bottom:20px; }
+small.hint{display:block;color:#666;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>📝 Manage Leave Requests</h1>
+<a href="admin.html"><button class="back">← Back to Dashboard</button></a>
+<div id="leaveRequests"></div>
+
+<script>
+const API_BASE = "http://localhost:5000";
+const token = localStorage.getItem("sc_token") || "";
+
+function authHeaders() {
+  const h = { "Content-Type": "application/json" };
+  if (token) h["Authorization"] = "Bearer " + token;
+  return h;
+}
+
+async function apiFetch(path, opts = {}) {
+  const url = API_BASE + path;
+  try {
+    opts.headers = {...(opts.headers||{}), ...(authHeaders())};
+    const res = await fetch(url, opts);
+    // If backend responds 404 or 501 for this resource, treat as unavailable
+    if (!res.ok) {
+      const body = await res.json().catch(()=>({message:res.statusText}));
+      const err = new Error(body.message || res.statusText);
+      err.status = res.status;
+      throw err;
+    }
+    return await res.json();
+  } catch (err) {
+    // signal caller that backend is unavailable by throwing
+    err._networkFail = true;
+    throw err;
+  }
+}
+
+/* --- localStorage fallback helpers --- */
+function readJSON(k, f){ try{const v=localStorage.getItem(k); return v?JSON.parse(v):f;}catch(e){return f;} }
+function writeJSON(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+
+async function loadLeaves(){
+  // Try server first: GET /leaves (server may not have this endpoint)
+  try {
+    const serverLeaves = await apiFetch('/leaves');
+    // normalize server object shape to local structure if needed
+    renderLeaves(serverLeaves);
+    return;
+  } catch(e){
+    // backend not available or endpoint absent -> fallback
+    const local = readJSON('leaves', []);
+    renderLeaves(local);
+  }
+}
+
+function renderLeaves(list){
+  const c=document.getElementById('leaveRequests');
+  c.innerHTML='';
+  if(!list || list.length===0){ c.innerHTML='<p>No leave requests.</p>'; return; }
+  list.forEach((l,i)=>{
+    const div=document.createElement('div');
+    div.className='request';
+    div.innerHTML=`<b>${escapeHtml(l.faculty || l.facultyName || 'Unknown')}</b> requested leave<br>
+                   From: ${escapeHtml(l.from)} → To: ${escapeHtml(l.to)}<br>
+                   Reason: ${escapeHtml(l.reason)}<br>
+                   Status: <b>${escapeHtml(l.status || 'pending')}</b>
+                   <div style="margin-top:8px">
+                    <button class="approve" onclick="approveLeave(${i})">Approve</button>
+                    <button class="reject" onclick="rejectLeave(${i})">Reject</button>
+                    <button class="delete" onclick="deleteLeave(${i})">🗑 Delete</button>
+                   </div>
+                   <small class="hint">This UI will use server if available, otherwise uses localStorage.</small>`;
+    c.appendChild(div);
+  });
+}
+
+async function approveLeave(i){
+  // Try server first
+  try {
+    const serverLeaves = await apiFetch('/leaves'); // check resource
+    const item = serverLeaves[i];
+    if(!item) throw new Error('Item not found on server');
+    await apiFetch(`/leaves/${item._id || item.id}`, { method: 'PUT', body: JSON.stringify({...item, status:'approved'}) });
+    await loadLeaves();
+    alert('Approved on server.');
+    return;
+  } catch(e){
+    // fallback to localStorage
+    const leaves = readJSON('leaves', []);
+    leaves[i].status = 'approved';
+    writeJSON('leaves', leaves);
+    renderLeaves(leaves);
+    alert('Approved (local).');
+  }
+}
+
+async function rejectLeave(i){
+  try {
+    const serverLeaves = await apiFetch('/leaves');
+    const item = serverLeaves[i];
+    if(!item) throw new Error('Item not found on server');
+    await apiFetch(`/leaves/${item._id || item.id}`, { method: 'PUT', body: JSON.stringify({...item, status:'rejected'}) });
+    await loadLeaves();
+    alert('Rejected on server.');
+    return;
+  } catch(e){
+    const leaves = readJSON('leaves', []);
+    leaves[i].status = 'rejected';
+    writeJSON('leaves', leaves);
+    renderLeaves(leaves);
+    alert('Rejected (local).');
+  }
+}
+
+async function deleteLeave(i){
+  if(!confirm('Delete this leave?')) return;
+  try {
+    const serverLeaves = await apiFetch('/leaves');
+    const item = serverLeaves[i];
+    if(!item) throw new Error('Item not found on server');
+    await apiFetch(`/leaves/${item._id || item.id}`, { method: 'DELETE' });
+    await loadLeaves();
+    alert('Deleted on server.');
+    return;
+  } catch(e){
+    const leaves = readJSON('leaves', []);
+    const removed = leaves.splice(i,1)[0];
+    writeJSON('leaves', leaves);
+    renderLeaves(leaves);
+    alert('Deleted (local).');
+  }
+}
+
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* startup */
+loadLeaves();
+</script>
+</body>
+</html>

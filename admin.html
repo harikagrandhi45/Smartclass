@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartClass Admin Dashboard</title>
+<style>
+body { font-family: Arial, sans-serif; background:#fff; margin:0; padding:0; }
+header { background:linear-gradient(120deg,#0c3b3b); color:#fff; padding:40px 40px; display:flex; justify-content:space-between; align-items:center; }
+header h1 { margin:0; font-size:28px; }
+
+/* Sections */
+.section {
+  max-width:1000px;
+  margin:40px auto;
+  padding:30px;
+  background:#fff;
+  border-radius:12px;
+  box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+.section h2 {
+  color:#009879;
+  margin-bottom:15px;
+}
+.section p { color:#444; line-height:1.6; }
+
+/* Buttons */
+.btn-container { margin-top:20px; }
+.btn {
+  display:inline-block;
+  margin:8px;
+  padding:10px 18px;
+  font-size:15px;
+  font-weight:bold;
+  border:none;
+  border-radius:6px;
+  background:#009879;
+  color:#fff;
+  cursor:pointer;
+  transition:0.3s;
+  text-decoration:none;
+}
+.btn:hover { background:#0c3b3b; }
+
+/* Logout button */
+.logout-btn {
+  background:linear-gradient(90deg,#009879,#2bb8f2);
+  color:#fff;
+  padding:10px 16px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:bold;
+  transition:0.3s;
+}
+.logout-btn:hover { background:#a61b1b; }
+
+/* Swap requests */
+.request { border-bottom:1px solid #eee; padding:10px 0; }
+.action-btn { padding:4px 8px; margin:4px; border:none; border-radius:4px; cursor:pointer; font-size:13px; }
+.approve { background:#16a34a; color:#fff; }
+.reject { background:#dc2626; color:#fff; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Admin Dashboard</h1>
+  <button class="logout-btn" onclick="logout()">Logout</button>
+</header>
+
+<!-- Sections -->
+<section id="grades" class="section">
+  <h2><span>🏷️</span> Manage Grades</h2>
+  <p>Add, update, and view student grades with automated calculations and secure record storage. Ensure transparency and easy reporting for students and parents.</p>
+  <div class="btn-container">
+    <a href="grades.html" class="btn">Manage Grades</a>
+  </div>
+</section>
+
+<section id="classrooms" class="section">
+  <h2><span>🏫</span> Manage Classrooms</h2>
+  <p>Assign rooms efficiently, check availability, and prevent double-bookings. Track classroom usage and optimize resource allocation for better management.</p>
+  <div class="btn-container">
+    <a href="classrooms.html" class="btn">Manage Classrooms</a>
+  </div>
+</section>
+
+<section id="faculty" class="section">
+  <h2><span>👩‍🏫</span> Manage Faculty</h2>
+  <p>Maintain faculty details, track workload, and assign classes fairly. Manage availability and avoid scheduling conflicts with smart automation.</p>
+  <div class="btn-container">
+    <a href="faculty.html" class="btn">Manage Faculty</a>
+  </div>
+</section>
+
+<!-- Removed Subjects per Branch section -->
+
+<section id="subjects" class="section">
+  <h2><span>📘</span> Assign Subjects</h2>
+  <p>Assign subjects to faculty, classes, and classrooms with flexibility. Link subjects to the right resources for streamlined teaching schedules.</p>
+  <div class="btn-container">
+    <a href="subjects.html" class="btn">Assign Subjects</a>
+  </div>
+</section>
+
+<section id="timetable" class="section">
+  <h2><span>📋</span> Generate/View Timetable</h2>
+  <p>Automatically generate conflict-free timetables. Allow students and faculty to view updated schedules in real-time, ensuring smooth academic operations.</p>
+  <div class="btn-container">
+    <a href="timetable.html" class="btn">Generate/View Timetable</a>
+  </div>
+</section>
+
+<section id="feedback" class="section">
+  <h2><span>💬</span> View Student Feedback</h2>
+  <p>Review feedback submitted by students about classes, faculty, and timetables. Use this input to improve academic management and resolve issues quickly.</p>
+  <div class="btn-container">
+    <a href="feedback.html" class="btn">View Feedback</a>
+  </div>
+</section>
+
+<section id="swap" class="section">
+  <h2><span>🔄</span> Manage Swap Requests</h2>
+  <p>Review and take action on faculty swap requests. Approve or reject requests easily.</p>
+  <div class="btn-container">
+    <a href="swap.html" class="btn">Manage Swaps</a>
+  </div>
+</section>
+
+<section id="leaves" class="section">
+  <h2><span>📝</span> Manage Leave Requests</h2>
+  <p>Approve or reject leave requests from teachers. Ensure smooth substitutions.</p>
+  <div class="btn-container">
+    <a href="leaves.html" class="btn">Manage Leaves</a>
+  </div>
+</section>
+
+<section class="section">
+  <h2>👥 Create Accounts</h2>
+  <p>Only admin can create Student and Teacher accounts.</p>
+  <div class="btn-container">
+    <a href="create-user.html" class="btn">Create User</a>
+  </div>
+</section>
+
+<script>
+function readJSON(k, fallback){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):fallback; }catch(e){ return fallback; } }
+function writeJSON(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+let swap_requests = readJSON('swap_requests', []);
+let notifications = readJSON('notifications', []);
+
+// Push notification
+function pushNotification(text){
+  notifications.unshift({text, time:new Date().toLocaleString(), important:true});
+  writeJSON('notifications', notifications);
+}
+
+// Logout function
+function logout(){
+  if(confirm("Are you sure you want to logout?")){
+    localStorage.removeItem('admin_logged_in');
+    window.location.href = "index.html";
+  }
+}
+</script>
+
+<!-- ====== backend-connection helper ====== -->
+<script>
+(function(){
+  const API_BASE = "http://localhost:5000";
+  const token = localStorage.getItem('sc_token') || null;
+
+  function authHeaders(){
+    const h = { 'Content-Type': 'application/json' };
+    if(token) h['Authorization'] = 'Bearer ' + token;
+    return h;
+  }
+
+  async function safeFetch(path, opts = {}){
+    opts.headers = Object.assign({}, opts.headers || {}, authHeaders());
+    const url = API_BASE + path;
+    try {
+      const res = await fetch(url, opts);
+      if(!res.ok){
+        let msg = res.statusText;
+        try { const body = await res.json(); if(body && body.message) msg = body.message; } catch(e){}
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+      if(res.status === 204) return null;
+      return await res.json();
+    } catch(err){
+      err._networkFail = true;
+      throw err;
+    }
+  }
+
+  async function fetchAndCacheAll(){
+    console.log('[connector] attempting to fetch core lists from', API_BASE);
+    const endpoints = ['/grades','/faculty','/classrooms','/labs','/subjects'];
+    try {
+      const results = await Promise.all(endpoints.map(p => safeFetch(p).catch(e => { console.warn('[connector] failed', p, e.message || e); return null; })));
+      const mapping = {
+        grades: results[0],
+        faculty: results[1],
+        classrooms: results[2],
+        labs: results[3],
+        subjects: results[4]
+      };
+      Object.keys(mapping).forEach(key => {
+        const val = mapping[key];
+        if(Array.isArray(val)){
+          localStorage.setItem(key, JSON.stringify(val));
+          console.info(`[connector] stored ${key} (${val.length}) into localStorage`);
+        } else {
+          console.info(`[connector] ${key} not updated (server returned null or non-array)`);
+        }
+      });
+      console.log('[connector] fetchAndCacheAll completed');
+    } catch(e){
+      console.warn('[connector] fetchAndCacheAll failed', e.message || e);
+    }
+  }
+
+  fetchAndCacheAll().catch(()=>{});
+  setTimeout(()=>fetchAndCacheAll().catch(()=>{}), 10000);
+  window.syncFromServer = function(){ return fetchAndCacheAll(); };
+})();
+</script>
+<!-- ====== end backend-connection helper ====== -->
+
+</body>
+</html>

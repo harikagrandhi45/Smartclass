@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Create User</title>
+<style>
+body{font-family:Arial;background:#f4f6f8;display:flex;justify-content:center;align-items:center;height:100vh}
+.card{background:#fff;padding:30px;width:420px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+h2{text-align:center;color:#009879}
+input,select{width:100%;padding:10px;margin:10px 0;border-radius:8px;border:1px solid #ccc}
+button{width:100%;background:#009879;color:#fff;padding:12px;border:none;border-radius:8px;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="card">
+<h2>Create User</h2>
+
+<form id="createUserForm">
+<select id="role" required>
+<option value="">Select Role</option>
+<option value="student">Student</option>
+<option value="teacher">Teacher</option>
+</select>
+
+<input type="text" id="name" placeholder="Full Name" required>
+<input type="email" id="email" placeholder="Email" required>
+<input type="password" id="password" placeholder="Password" required>
+
+<button type="submit">Create Account</button>
+</form>
+</div>
+
+<script>
+const API_BASE="http://localhost:5000";
+
+document.getElementById("createUserForm").onsubmit = async function(e){
+e.preventDefault();
+
+const role=document.getElementById("role").value;
+const name=document.getElementById("name").value.trim();
+const email=document.getElementById("email").value.trim();
+const password=document.getElementById("password").value;
+
+const token=localStorage.getItem("sc_token");
+
+if(!token){
+alert("Admin login required to create user.");
+return;
+}
+
+try{
+const res=await fetch(`${API_BASE}/signup`,{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"Authorization":"Bearer "+token
+},
+body:JSON.stringify({role,name,email,password})
+});
+
+const data=await res.json();
+
+if(!res.ok){
+alert(data.message);
+return;
+}
+
+alert("User created successfully!");
+this.reset();
+
+}catch(err){
+alert("Server error");
+}
+};
+</script>
+
+</body>
+</html>
